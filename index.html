@@ -737,11 +737,9 @@ html.can-squish, html.can-squish body { cursor: pointer; }
 .field input:focus { outline: 2px solid var(--ink); outline-offset: 2px; }
 .field .err { color: #a3361f; font-size: 13px; min-height: 1.2em; }
 .zzz-big { font: 800 64px/1 var(--f-display); font-stretch: 125%; letter-spacing: -.04em; }
-.pay-box { display: grid; gap: 8px; }
-.pay-box a { color: var(--ink); font-weight: 600; }
-.or { display: flex; align-items: center; gap: 12px; font: 500 var(--t-mono)/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); }
-.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--rule-ink); }
-.step.no-pay .pay-box, .step.no-pay .or, .step.is-offline .pay-box, .step.is-offline .or, .step.is-offline .field { display: none; }
+.field label + input { margin-bottom: 6px; }
+.field .opt { text-transform: none; letter-spacing: 0; opacity: .7; }
+.step.is-offline .field { display: none; }
 .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 .offline { padding: 14px 16px; border-radius: 14px; background: var(--linen-2); font-size: 14px; color: var(--ink-2); }
 .offline a { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
@@ -1404,18 +1402,17 @@ html.no-gl #gl { display: none; }
       </div>
       <div class="step" data-step="3" hidden>
         <h4>Close enough.</h4>
-        <p data-pay-intro>Pay now and we'll ship it fluffed. Or reserve with your email and pay when it ships.</p>
-        <div class="pay-box" data-pay-box>
-          <button class="btn btn--ink btn--lg" type="button" data-pay>Pay <span data-pay-total>$88</span> securely</button>
-          <p class="fine" data-pay-note>Card payment by Stripe, on Stripe's own checkout page.</p>
-        </div>
-        <p class="or" data-pay-or aria-hidden="true">or</p>
+        <p>Pre-orders open soon. Reserve now and we'll hold your pillow. Nothing to pay today.</p>
         <form class="field" data-reserve-form novalidate>
-          <label for="reserve-email">Reserve with your email</label>
+          <label for="reserve-email">Email</label>
           <input id="reserve-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+          <label for="reserve-name">Name <span class="opt">(optional)</span></label>
+          <input id="reserve-name" name="fullname" type="text" autocomplete="name" maxlength="120">
+          <label for="reserve-country">Country <span class="opt">(optional)</span></label>
+          <input id="reserve-country" name="country" type="text" autocomplete="country-name" maxlength="80">
           <input class="hp" id="reserve-company" name="company" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">
           <span class="err" data-reserve-err role="alert"></span>
-          <button class="btn btn--lg" type="submit" data-reserve-btn>Reserve without paying</button>
+          <button class="btn btn--ink btn--lg" type="submit" data-reserve-btn>Reserve my pillow</button>
           <p class="fine">We only use your email to tell you when your pillow ships.</p>
         </form>
         <p class="offline" data-offline hidden>Checkout and reservations run on the live site: <a href="https://hmhmokokok.github.io/psmt-fast/#reserve" target="_blank" rel="noopener">hmhmokokok.github.io/psmt-fast</a></p>
@@ -1424,13 +1421,6 @@ html.no-gl #gl { display: none; }
         <p class="zzz-big" aria-hidden="true">Zzz.</p>
         <h4>Reserved. Sleep well.</h4>
         <p>We'll wake you when it ships. Gently, and not before 9.</p>
-        <div class="step-actions"><button class="btn" type="button" data-bed-close>Back to the pillow</button></div>
-      </div>
-      <div class="step" data-step="paid" hidden>
-        <p class="zzz-big" aria-hidden="true">Zzz.</p>
-        <h4>Order placed. Sleep well.</h4>
-        <p>Payment received. We'll email you when your pillow ships.</p>
-        <p class="fine mono" data-order-ref></p>
         <div class="step-actions"><button class="btn" type="button" data-bed-close>Back to the pillow</button></div>
       </div>
     </div>
@@ -1889,20 +1879,17 @@ html.no-gl #gl { display: none; }
   $$('[data-film-close]').forEach(b => b.addEventListener('click', () => { clearInterval(filmTimer); closeModal(film); }));
 
   /* ---------- bed drawer ---------- */
-  const drawer = $('[data-drawer]'), itemsEl = $('[data-bed-items]'), totalEl = $('[data-bed-total]'), noteEl = $('[data-bed-note]'), countEl = $('[data-bed-count]'), payTotal = $('[data-pay-total]');
+  const drawer = $('[data-drawer]'), itemsEl = $('[data-bed-items]'), totalEl = $('[data-bed-total]'), noteEl = $('[data-bed-note]'), countEl = $('[data-bed-count]');
   const bed = [];
 
   // Live backend: Supabase project "psmt-fast". The publishable key is meant to be public. It can
-  // only call reserve_pillow(); both tables sit behind RLS. Card checkout is the psmt-checkout
-  // edge function, which prices the cart itself and hands back a Stripe Checkout URL.
+  // only call reserve_pillow(); the reservations table sits behind RLS.
   const API = {
     rest: 'https://tdaxzeejjxkuzizvxyoy.supabase.co/rest/v1',
-    checkout: 'https://tdaxzeejjxkuzizvxyoy.supabase.co/functions/v1/psmt-checkout',
     key: 'sb_publishable_kpYTDeZV7kl-u7U609Dzzw_AqAytB-c'
   };
-  let payments = null; // unknown until the checkout function answers
 
-  // The cart survives the round trip to Stripe in this browser only.
+  // The cart survives a reload in this browser only.
   const BED_KEY = 'psmt-bed';
   function saveBed() { try { localStorage.setItem(BED_KEY, JSON.stringify(bed)); } catch (e) { /* storage blocked */ } }
   function loadBed() {
@@ -1934,7 +1921,6 @@ html.no-gl #gl { display: none; }
       itemsEl.appendChild(row);
     });
     totalEl.textContent = '$' + total;
-    payTotal.textContent = '$' + total;
     countEl.textContent = qty; countEl.hidden = qty === 0;
     saveBed();
     noteEl.textContent = qty >= 6 ? 'You are building a fort. We respect that.' : qty >= 4 ? 'Bold.' : qty === 3 ? 'One for each side, and one for the cat.' : qty === 2 ? 'One for each side.' : '';
@@ -1947,7 +1933,6 @@ html.no-gl #gl { display: none; }
     const found = bed.find(it => it.model === model && it.color === color);
     if (found) found.qty++; else bed.push({ model, price: +price, color, qty: 1 });
     renderBed(); gotoStep(1); openModal(drawer);
-    checkPayments();
   }));
   $$('[data-bed-close]').forEach(b => b.addEventListener('click', () => closeModal(drawer)));
   $$('[data-goto]').forEach(b => b.addEventListener('click', () => gotoStep(b.dataset.goto)));
@@ -1960,64 +1945,13 @@ html.no-gl #gl { display: none; }
     setTimeout(() => { lyingBtn.disabled = false; lyingBar.style.width = '0'; lyingNote.textContent = 'Waiting for horizontal position.'; gotoStep(3); }, 2000);
   });
   const form = $('[data-reserve-form]'), err = $('[data-reserve-err]'), reserveBtn = $('[data-reserve-btn]');
-  const step3 = $('[data-step="3"]', drawer), payIntro = $('[data-pay-intro]'), payBtn = $('[data-pay]'), payNote = $('[data-pay-note]');
-  const offlineNote = $('[data-offline]');
-  const reserveLabel = () => payments === false ? 'Reserve my pillow' : 'Reserve without paying';
+  const step3 = $('[data-step="3"]', drawer), offlineNote = $('[data-offline]');
 
   // Pages that can't reach the backend (a sandboxed preview, say) point people at the live site.
   function goOffline() {
     step3.classList.add('is-offline');
     offlineNote.hidden = false;
   }
-  function applyPayMode() {
-    step3.classList.toggle('no-pay', payments === false);
-    reserveBtn.classList.toggle('btn--ink', payments === false);
-    reserveBtn.textContent = reserveLabel();
-    payIntro.textContent = payments === false
-      ? "Card checkout opens soon. Reserve with your email and we'll hold one for you."
-      : "Pay now and we'll ship it fluffed. Or reserve with your email and pay when it ships.";
-  }
-  async function checkPayments() {
-    if (payments !== null) return;
-    try {
-      const r = await fetch(API.checkout);
-      payments = r.ok ? Boolean((await r.json()).payments) : false;
-    } catch (e) {
-      payments = false;
-      goOffline();
-    }
-    applyPayMode();
-  }
-
-  payBtn.addEventListener('click', async () => {
-    payBtn.disabled = true;
-    payNote.textContent = 'Opening secure checkout.';
-    try {
-      const r = await fetch(API.checkout, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: cartLines(), return_url: location.origin + location.pathname })
-      });
-      const data = await r.json().catch(() => ({}));
-      if (r.ok && data.url) {
-        saveBed();
-        if (window.top === window.self) { location.assign(data.url); return; }
-        // Inside a frame, Stripe has to open in its own tab, through a real link.
-        payNote.textContent = '';
-        const a = document.createElement('a');
-        a.href = data.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Continue to Stripe checkout ↗';
-        payNote.appendChild(a);
-      } else if (data.error === 'payments_not_configured') {
-        payments = false; applyPayMode();
-      } else {
-        payNote.textContent = 'Checkout is having a lie-down. Try again in a moment, or reserve below.';
-      }
-    } catch (e) {
-      goOffline();
-    } finally {
-      payBtn.disabled = false;
-    }
-  });
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
@@ -2031,7 +1965,7 @@ html.no-gl #gl { display: none; }
       const r = await fetch(`${API.rest}/rpc/reserve_pillow`, {
         method: 'POST',
         headers: { apikey: API.key, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_email: v, p_items: cartLines() })
+        body: JSON.stringify({ p_email: v, p_items: cartLines(), p_name: form.fullname.value.trim(), p_country: form.country.value.trim() })
       });
       if (r.ok) { gotoStep(4); return; }
       err.textContent = r.status === 400
@@ -2041,29 +1975,12 @@ html.no-gl #gl { display: none; }
       goOffline();
     } finally {
       reserveBtn.disabled = false;
-      reserveBtn.textContent = reserveLabel();
+      reserveBtn.textContent = 'Reserve my pillow';
     }
   });
 
-  // Back from Stripe: ?checkout=success&order=… or ?checkout=cancelled
   loadBed();
   renderBed();
-  const qs = new URLSearchParams(location.search);
-  const returned = qs.get('checkout');
-  if (returned) {
-    try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* sandboxed */ }
-    if (returned === 'success') {
-      bed.length = 0;
-      renderBed();
-      const ref = (qs.get('order') || '').replace(/[^0-9a-f]/gi, '').slice(0, 8).toUpperCase();
-      $('[data-order-ref]').textContent = ref ? `Order ref ${ref}` : '';
-      gotoStep('paid'); openModal(drawer);
-    } else if (returned === 'cancelled' && bed.length) {
-      noteEl.textContent = 'Checkout cancelled. Your pillow is still in bed.';
-      gotoStep(1); openModal(drawer);
-      checkPayments();
-    }
-  }
   addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if (!film.hidden) { clearInterval(filmTimer); closeModal(film); }
